@@ -1,0 +1,415 @@
+//######################################################################################################## 
+//#                                                                                                    #\\
+//#                               Bias-Adjusted RADiation Dataset                                      #\\
+//#                                                                                                    #\\
+//########################################################################################################
+
+
+// date: 2021-7-1
+// authors: TC Chakraborty | tc.chakraborty@yale.edu | https://tc25.github.io/
+// website: Active; some code based on the global surface UHI app and some parts are based on https://gist.github.com/jdbcode/6a3f58cd02a64e071d8eb1b23c905414
+
+
+var K_dir = ee.Image("users/yceo/BaRAD/BaRAD_K_dir"),
+    K_diff = ee.Image("users/yceo/BaRAD/BaRAD_K_diff"),
+    ERA5 = ee.ImageCollection("ECMWF/ERA5/MONTHLY");
+ 
+
+var K_dir_bands = K_dir.bandNames();
+var K_diff_bands = K_diff.bandNames();
+
+
+var ERA5=ERA5.filterDate('1980-01-01','2020-01-01')
+
+var time_start=ERA5.aggregate_array('system:time_start')
+var time_end=ERA5.aggregate_array('system:time_end')
+
+
+var K_Collection = ee.ImageCollection.fromImages(K_dir_bands.map(function(name){
+  name = ee.String(name);
+  var Index=ee.Number.parse(ee.String(name).split('b').get(1)).subtract(1)
+  // select one band an put into an image. You might need a specific cast and renaming of the bands
+  return K_dir.select(name).rename('K_dir').toFloat().addBands(K_diff.select(name).rename('K_diff').toFloat()).set( 'system:time_start',time_start.get(Index),'system:time_end',time_end.get(Index));
+}));
+
+
+
+var colors = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#74add1','#4575b4','#313695'].reverse()
+
+/*Import the images containing the 16-year mean values of daytime LST and nighttime LST, which you previously exported*/
+
+var Composite=ee.Image('users/yceo/BaRAD/Composite')
+
+// Create layer selector
+//var selectionpanel = ui.Panel({style: {width: '250px',position: 'bottom-right'}});
+//Load annual means data
+
+var c = {};
+
+// Panel to hold the chart.
+c.chartPanel = ui.Panel();
+
+// Map widget.
+c.map = ui.Map();
+
+// Map/chart panel
+c.mapChartSplitPanel = ui.SplitPanel({
+  firstPanel: c.map, //
+  secondPanel: c.chartPanel,
+  orientation: 'vertical',
+  wipe: false,
+});
+
+// Messages.
+c.clickMessage = ui.Label('🖱️ Click any grid to visualize the monthly BaRAD diffuse and direct beam radiation values')
+c.waitMessage = ui.Label('⚙️ Processing, please wait.');
+
+// Element panel.
+c.aboutPanel = ui.Panel(
+  {style: {margin: '0px -8px 0px -8px'}});
+
+// Show/hide info panel button.
+c.aboutButton = ui.Button(
+  {label: 'About ❯', style: {margin: '0px 4px 0px 0px'}});
+
+// Information text. 
+c.descrLabel = ui.Label(
+  'This app shows the Bias-Adjusted RADiation (BaRAD) '+
+  "dataset. The 40-year (1980-2019) annual composites "+
+  "are visualized on the map. Click on a grid to "+
+  'extract monthly time series of diffuse and direct ' +
+  'beam radiation at the surface from 1980 to 2019');
+
+c.gridmetLabel = ui.Label('Learn more about this dataset.', null,
+  'https://github.com/TC25/BaRAD');
+c.descrHolder = ui.Panel([c.descrLabel, c.gridmetLabel]);
+
+ui.root.clear();
+ui.root.add(c.mapChartSplitPanel);
+c.map.add(c.aboutPanel);
+c.chartPanel.add(c.clickMessage);
+c.aboutPanel.add(c.aboutButton);
+c.aboutPanel.add(c.descrHolder);
+
+// Set the default map's cursor to a "crosshair".
+c.map.style().set('cursor', 'crosshair');
+
+
+
+c.map.onClick(function(coords) {
+//Clear panel
+
+
+
+// Register a callback on the default map to be invoked when the map is clicked.
+  // Add a red dot for the point clicked on.
+  var point = ee.Geometry.Point(coords.lon, coords.lat);
+  var dot = ui.Map.Layer(point, {color: 'FF0000'});
+  c.map.layers().set(1, dot);
+//Clear inspector
+//Calculate the UHI values at the points from the images
+
+  
+    // Create a daytime UHI chart.
+  var TimeChart = ui.Chart.image.series(K_Collection, point).setChartType('LineChart');
+  TimeChart.setOptions({
+    title: '40-year monthly variability in diffuse and direct beam radiation (W/m2)',
+      vAxes: {
+        0: {
+          title: 'Diffuse radiation', format: '#.##',  titleTextStyle: {bold: true, color: '#993333', italic: false}
+        },
+        1: {
+          title: 'Direct beam radiation', format: '#.##',  titleTextStyle: {bold: true, color: '#6600ff', italic: false}
+        }
+      },
+    hAxis: {title: 'Year', format: 'yyyy', gridlines: {count: 40}, titleTextStyle: {bold: true, italic: false}},
+     curveType: 'function',
+        colors: ["#993333","#6600ff"],
+        lineWidth:3,
+  pointSize: 5,
+  
+        //chartArea: {height: '65%'},
+       'tooltip' : {
+  trigger: 'hover'
+},
+        series: {
+        0: {targetAxisIndex: 0},
+        1: {targetAxisIndex: 1}
+      }
+  });
+c.chartPanel.widgets().reset([TimeChart]);
+   //Months
+//var Months=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+   
+   
+
+   
+});
+
+
+var legend = ui.Panel({style: {position: 'top-left',width: '15%'}});
+function legendcreate()
+{
+legend.add(ui.Label())}
+  //Call legend creation function
+  legendcreate()
+  
+  
+  
+
+  
+var K_downVis = Composite.select('K_down').visualize({min:0, max:300,palette:colors ,opacity:.8})
+var K_diffVis = Composite.select('K_diff').visualize({min:0, max:120,palette:colors ,opacity:.8})
+var K_dirVis = Composite.select('K_dir').visualize({min:0, max:150,palette:colors ,opacity:.8} )
+
+// Define some constants.
+// Define some constants.
+var K_DOWN = 'Total shortwave radiation';
+var K_DIFF = 'Diffuse radiation';
+var K_DIR = 'Direct beam radiation';
+var none= "Remove layer"
+
+/*Add UHI layers to map to display the 16-year daytime and nightime urban heat islands of the world's 4999 largest cities*/
+// Create a layer selector that dictates which layer is visible on the map.
+var select = ui.Select({
+  items: [K_DOWN, K_DIFF, K_DIR, none],
+  value: K_DOWN,
+  onChange: redraw,
+});
+legend.add(ui.Label({value:'Choose display layer:',style: {fontSize: '13px', fontWeight: 'bold', textAlign: 'left'}
+})).add(select);
+  var vis = {min: 0, max: 300, palette: colors};
+//fontSize: '13px',
+
+function makeColorBarParams(palette) {
+  return {
+    bbox: [0, 0, 1, 0.1],
+    dimensions: '100x10',
+    format: 'png',
+    min: 0,
+    max: 1,
+    palette: palette,
+  };
+  
+}
+
+function redraw() {
+   c.map.layers().reset();
+  //Clear legend and create new legend 
+  legend.clear()
+  legendcreate()
+  var layer = select.getValue();
+  var image
+  legend.add(ui.Label({value:'Choose display layer:',style: {fontSize: '15px', fontWeight: 'bold', textAlign: 'left'}})).add(select);
+
+  if (layer==K_DOWN)
+  {
+    // Color labels and palette
+
+
+  vis = {min: 0, max: 300, palette: colors};
+  
+// Creates a color bar thumbnail image for use in legend from the given color
+// palette.
+
+// Create the color bar for the legend.
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: makeColorBarParams(vis.palette),
+  style: {stretch: 'horizontal', margin: '0px 0px', maxHeight: '10%', width:'100%'},
+});
+
+// Create a panel with three numbers for the legend.
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(vis.min, {margin: '0px 0px'}),
+    ui.Label(
+        (vis.mean),
+        {margin: '0px 0px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(vis.max, {margin: '0px 0px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+  legend.add(ui.Label({value:'40-year (1980-2019) annual composite (W/m2) ',style: {fontSize: '15px', fontWeight: 'normal', textAlign: 'left'}}))
+  //legend.add(ui.Label({value:'Estimated number of cases over the last fourteen days per pixel',style: {fontSize: '12px',textAlign: 'left'}}))
+  legend.add(colorBar)
+  legend.add(legendLabels)
+  image=K_downVis;
+
+//Clear legend and create new legend 
+  }
+  
+  
+    else if(layer==K_DIFF)  {
+
+  vis = {min: 0, max: 120, palette: colors};
+  
+// Creates a color bar thumbnail image for use in legend from the given color
+// palette.
+
+// Create the color bar for the legend.
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: makeColorBarParams(vis.palette),
+  style: {stretch: 'horizontal', margin: '0px 0px', maxHeight: '10%', width:'100%'},
+});
+
+// Create a panel with three numbers for the legend.
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(vis.min, {margin: '0px 0px'}),
+    ui.Label(
+        (vis.mean),
+        {margin: '0px 0px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(vis.max, {margin: '0px 0px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+    legend.add(ui.Label({value:'40-year (1980-2019) annual composite (W/m2)',style: {fontSize: '15px',fontWeight: 'normal', textAlign: 'left'}}))
+  //legend.add(ui.Label({value:'Estimated number of cases from the beginning of the pandemic per pixel',style: {fontSize: '12px',textAlign: 'left'}}))
+  legend.add(colorBar)
+  legend.add(legendLabels)
+  image=K_diffVis;
+
+
+  }
+
+
+    else if(layer==K_DIR)  {
+
+  vis = {min: 0, max: 150, palette: colors};
+  
+// Creates a color bar thumbnail image for use in legend from the given color
+// palette.
+
+// Create the color bar for the legend.
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: makeColorBarParams(vis.palette),
+  style: {stretch: 'horizontal', margin: '0px 0px', maxHeight: '10%', width:'100%'},
+});
+
+// Create a panel with three numbers for the legend.
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(vis.min, {margin: '0px 0px'}),
+    ui.Label(
+        (vis.mean),
+        {margin: '0px 0px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(vis.max, {margin: '0px 0px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+    legend.add(ui.Label({value:'40-year (1980-2019) annual composite (W/m2)',style: {fontSize: '15px',fontWeight: 'normal', textAlign: 'left'}}))
+  //legend.add(ui.Label({value:'Estimated number of cases from the beginning of the pandemic per pixel',style: {fontSize: '12px',textAlign: 'left'}}))
+  legend.add(colorBar)
+  legend.add(legendLabels)
+  image=K_dirVis;
+
+
+  }
+
+c.map.addLayer(image, {}, layer);
+
+   if (layer==none)
+   {
+
+c.map.layers().reset();
+
+   }
+  
+}
+
+
+
+
+
+
+
+var s = {};
+
+s.opacityWhiteMed = {
+  backgroundColor: 'rgba(255, 255, 255, 0.5)'
+};
+s.opacityWhiteNone = {
+  backgroundColor: 'rgba(255, 255, 255, 0)'
+};
+s.chartStyle = {
+  height: '275px',
+  margin: '0px',
+  padding: '0px'
+};
+
+c.map.style().set('cursor', 'crosshair');
+
+c.chartPanel.style().set({
+  height: s.chartStyle.height,
+  minHeight: s.chartStyle.height,
+  maxHeight: s.chartStyle.height
+});
+
+c.aboutPanel.style().set({
+  position: 'bottom-right',
+  backgroundColor: 'rgba(255, 255, 255, 0.5)'
+});
+
+c.descrLabel.style().set({
+  margin: '0px',
+  backgroundColor: 'rgba(255, 255, 255, 0)',
+  fontSize: '15px',
+  color: '505050'
+});
+
+c.gridmetLabel.style().set({
+  margin: '4px 0px 0px 0px',
+  backgroundColor: 'rgba(255, 255, 255, 0)',
+  fontSize: '15px',
+  color: '505050'
+});
+
+c.descrHolder.style().set({
+  shown: false,
+  width: '250px',
+  margin: '4px 0px 0px 0px',
+  padding: '8px 8px 8px 8px',
+  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+});
+
+c.aboutButton.style().set({
+  margin: '0px 0px 0px 0px'
+});
+
+
+var infoShow = false;
+function infoButtonHandler() {
+  if(infoShow) {
+    infoShow = false;
+    c.descrHolder.style().set('shown', false);
+    c.aboutButton.setLabel('About ❯');
+  } else {
+    infoShow = true;
+    c.descrHolder.style().set('shown', true);
+    c.aboutButton.setLabel('About ❮');
+  }
+}
+c.aboutButton.onClick(infoButtonHandler);
+
+
+
+// Invoke the redraw function once at start up to initialize the map.
+redraw();
+
+
+
+c.map.setCenter(0,0,2)  
+
+
+c.map.add(legend);
+//var outline = ee.Image().paint(urb, 0, 1)
+//map.addLayer(outline,null)
+
+
+
