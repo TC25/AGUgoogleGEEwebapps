@@ -9,41 +9,38 @@
 // authors: TC Chakraborty | tc.chakraborty25@gmail.com | https://tc25.github.io/
 // website: Active; some code based on the global surface UHI app and some parts are based on https://gist.github.com/jdbcode/6a3f58cd02a64e071d8eb1b23c905414
 
+// Load necessary images and image collections
+var K_dir = ee.Image("users/yceo/BaRAD/BaRAD_K_dir"), // BaRAD_K_dir image
+    K_diff = ee.Image("users/yceo/BaRAD/BaRAD_K_diff"), // BaRAD_K_diff image
+    ERA5 = ee.ImageCollection("ECMWF/ERA5/MONTHLY"); // ERA5 image collection
 
-var K_dir = ee.Image("users/yceo/BaRAD/BaRAD_K_dir"),
-    K_diff = ee.Image("users/yceo/BaRAD/BaRAD_K_diff"),
-    ERA5 = ee.ImageCollection("ECMWF/ERA5/MONTHLY");
- 
-
+// Get band names for K_dir and K_diff
 var K_dir_bands = K_dir.bandNames();
 var K_diff_bands = K_diff.bandNames();
 
+// Filter the ERA5 collection by date range
+var ERA5 = ERA5.filterDate('1980-01-01', '2020-01-01');
 
-var ERA5=ERA5.filterDate('1980-01-01','2020-01-01')
+// Get time start and end arrays for each image in the ERA5 collection
+var time_start = ERA5.aggregate_array('system:time_start');
+var time_end = ERA5.aggregate_array('system:time_end');
 
-var time_start=ERA5.aggregate_array('system:time_start')
-var time_end=ERA5.aggregate_array('system:time_end')
-
-
-var K_Collection = ee.ImageCollection.fromImages(K_dir_bands.map(function(name){
+// Create an image collection of BaRAD data for each band
+var K_Collection = ee.ImageCollection.fromImages(K_dir_bands.map(function(name) {
   name = ee.String(name);
-  var Index=ee.Number.parse(ee.String(name).split('b').get(1)).subtract(1)
-  // select one band an put into an image. You might need a specific cast and renaming of the bands
-  return K_dir.select(name).rename('K_dir').toFloat().addBands(K_diff.select(name).rename('K_diff').toFloat()).set( 'system:time_start',time_start.get(Index),'system:time_end',time_end.get(Index));
+  var Index = ee.Number.parse(ee.String(name).split('b').get(1)).subtract(1);
+  // Select one band and put into an image. You might need a specific cast and renaming of the bands
+  return K_dir.select(name).rename('K_dir').toFloat().addBands(K_diff.select(name).rename('K_diff').toFloat()).set('system:time_start', time_start.get(Index), 'system:time_end', time_end.get(Index));
 }));
 
-
-
+// Reverse color scale for later use
 var colors = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#74add1','#4575b4','#313695'].reverse()
 
-/*Import the images containing the 16-year mean values of daytime LST and nighttime LST, which you previously exported*/
+/* Import the images containing the 16-year mean values of daytime LST and nighttime LST, which you previously exported */
 
-var Composite=ee.Image('users/yceo/BaRAD/Composite')
+var Composite = ee.Image('users/yceo/BaRAD/Composite')
 
-// Create layer selector
-//var selectionpanel = ui.Panel({style: {width: '250px',position: 'bottom-right'}});
-//Load annual means data
-
+// Create UI elements
 var c = {};
 
 // Panel to hold the chart.
@@ -169,7 +166,6 @@ var K_DIFF = 'Diffuse radiation';
 var K_DIR = 'Direct beam radiation';
 var none= "Remove layer"
 
-/*Add UHI layers to map to display the 16-year daytime and nightime urban heat islands of the world's 4999 largest cities*/
 // Create a layer selector that dictates which layer is visible on the map.
 var select = ui.Select({
   items: [K_DOWN, K_DIFF, K_DIR, none],
