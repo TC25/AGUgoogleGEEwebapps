@@ -4,7 +4,7 @@
 // 1. Add city bounds to census tracts map -- done
 // 2. Make the boundaries boder -- done
 // 3. Now user can toggle the layers. -- done
-//Further modified by TC (on Nov, 2021 and again in Nov, 2022)
+//Further modified by TC (on Nov, 2021 and again on Nov, 2022)
 //1. Made sure new legend items load after every layer selection 
 //2. Updated legend text. 
 //3. Made sure how the SUHI is generated is always shown on the panel
